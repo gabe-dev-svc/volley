@@ -1,0 +1,7 @@
+/frontend/build/
+.dart_tool/
+/target/
+cdk.out
+.env
+.aws/
+infra/.env
