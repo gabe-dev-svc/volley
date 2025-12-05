@@ -1,0 +1,1402 @@
+openapi: 3.0.3
+info:
+  title: Volley API
+  description: API for organizing and joining pickup sports games
+  version: 1.0.0
+  contact:
+    name: Volley Support
+    email: support@volley.app
+
+servers:
+  - url: https://api.volley.app/v1
+    description: Production server
+  - url: http://localhost:8080/v1
+    description: Local development server
+
+tags:
+  - name: auth
+    description: Authentication operations
+  - name: games
+    description: Game management
+  - name: participants
+    description: Participant operations
+  - name: teams
+    description: Team management
+  - name: users
+    description: User operations
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - auth
+      summary: Register a new user
+      description: |
+        Registers a new user and returns a JWT token.
+
+        **Authentication Method:**
+        - Mobile clients (X-Client-Type: mobile): JWT returned in response body
+        - Web clients: JWT set as HTTP-only secure cookie (auth_token)
+      operationId: register
+      parameters:
+        - name: X-Client-Type
+          in: header
+          description: Client type identifier. Set to 'mobile' for mobile apps.
+          schema:
+            type: string
+            enum: [mobile, web]
+          example: mobile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              firstName: "John"
+              lastName: "Doe"
+              email: "john.doe@example.com"
+              password: "SecurePass123!"
+      responses:
+        '201':
+          description: |
+            User created successfully. For mobile clients, the JWT token is included in the response.
+            For web clients, the token is set as an HTTP-only cookie.
+          headers:
+            Set-Cookie:
+              description: JWT token cookie (web clients only)
+              schema:
+                type: string
+                example: auth_token=eyJhbGc...; Path=/; HttpOnly; Secure; SameSite=Strict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request (validation errors)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Login user
+      description: |
+        Authenticates a user and returns a JWT token.
+
+        **Authentication Method:**
+        - Mobile clients (X-Client-Type: mobile): JWT returned in response body
+        - Web clients: JWT set as HTTP-only secure cookie (auth_token)
+      operationId: login
+      parameters:
+        - name: X-Client-Type
+          in: header
+          description: Client type identifier. Set to 'mobile' for mobile apps.
+          schema:
+            type: string
+            enum: [mobile, web]
+          example: mobile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "john.doe@example.com"
+              password: "SecurePass123!"
+      responses:
+        '200':
+          description: |
+            Login successful. For mobile clients, the JWT token is included in the response.
+            For web clients, the token is set as an HTTP-only cookie.
+          headers:
+            Set-Cookie:
+              description: JWT token cookie (web clients only)
+              schema:
+                type: string
+                example: auth_token=eyJhbGc...; Path=/; HttpOnly; Secure; SameSite=Strict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games:
+    get:
+      tags:
+        - games
+      summary: List games
+      operationId: listGames
+      parameters:
+        - name: categories
+          in: query
+          required: true
+          description: Filter by sport categories (can specify multiple)
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/GameCategory'
+          example: ["soccer"]
+        - name: latitude
+          in: query
+          required: true
+          description: Latitude coordinate for location-based search
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          example: 29.7736199
+        - name: longitude
+          in: query
+          required: true
+          description: Longitude coordinate for location-based search
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          example: -95.4201315
+        - name: radius
+          in: query
+          description: Search radius in meters (default 16093.4 meters = 10 miles)
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            default: 16093.4
+          example: 16093.4
+        - name: timeFilter
+          in: query
+          description: Filter by time (upcoming, past, or all)
+          schema:
+            type: string
+            enum: [upcoming, past, all]
+            default: upcoming
+          example: upcoming
+        - name: status
+          in: query
+          description: Filter by game status
+          schema:
+            $ref: '#/components/schemas/GameStatus'
+        - name: limit
+          in: query
+          description: Number of results to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of games
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - games
+                properties:
+                  games:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GameSummary'
+
+    post:
+      tags:
+        - games
+      summary: Create a new game
+      operationId: createGame
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGameRequest'
+            example:
+              category: "soccer"
+              title: "Sunday Morning Soccer"
+              description: "Casual pickup soccer at O Athletik. All skill levels welcome! Bring cleats and shin guards."
+              location:
+                name: "O Athletik"
+                address: "767 N Shepherd Dr, Houston, TX 77007"
+                latitude: 29.7852774
+                longitude: -95.4102687
+                notes: "Park in the back. Meet at Field 1."
+              startTime: "2025-11-28T20:00:00Z"
+              durationMinutes: 90
+              maxParticipants: 12
+              pricing:
+                type: "free"
+                amountCents: 0
+                currency: "USD"
+              signupDeadline: "2025-11-27T20:00:00Z"
+              skillLevel: "all"
+              notes: "We'll split into teams when we get there. Bring water!"
+      responses:
+        '201':
+          description: Game created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}:
+    get:
+      tags:
+        - games
+      summary: Get game details
+      operationId: getGame
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Game details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - games
+      summary: Update game details
+      operationId: updateGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGameRequest'
+      responses:
+        '200':
+          description: Game updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - games
+      summary: Delete a game (hard delete)
+      description: Permanently deletes a game record. Use the cancel endpoint for soft cancellation.
+      operationId: deleteGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Game deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/participation:
+    post:
+      tags:
+        - games
+      summary: Join a game
+      description: Sign up for a game. If the game is full, you'll be added to the waitlist.
+      operationId: joinGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successfully joined game or added to waitlist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Successfully joined the game"
+                  status:
+                    type: string
+                    enum: [confirmed, waitlist]
+                    description: Whether you were added to roster or waitlist
+        '400':
+          description: Invalid request or signup deadline passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already signed up for this game
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - games
+      summary: Leave a game
+      description: Cancel your participation in a game. If there's a waitlist, the first person will be promoted.
+      operationId: dropGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successfully left the game
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Successfully dropped from game"
+        '400':
+          description: Not a participant in this game
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Drop deadline has passed or game has already finished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/cancel:
+    post:
+      tags:
+        - games
+      summary: Cancel a game
+      description: |
+        Cancel a game (soft delete). Sets status to 'cancelled' and records cancellation timestamp.
+        Only the game owner can cancel. Cannot cancel games that have already started, finished, or completed.
+        All participants will be notified (when push notifications are implemented).
+      operationId: cancelGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Game cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Game cancelled successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner or game has already started/finished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notOwner:
+                  value:
+                    error: "Only the game owner can cancel the game"
+                alreadyStarted:
+                  value:
+                    error: "Cannot cancel a game that has already started"
+                alreadyFinished:
+                  value:
+                    error: "Cannot cancel a game that has already finished"
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/participants:
+    get:
+      tags:
+        - participants
+      summary: Get game participants
+      operationId: getGameParticipants
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of participants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roster:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Participant'
+                  waitlist:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Participant'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - participants
+      summary: Sign up for a game
+      operationId: signUpForGame
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+      responses:
+        '201':
+          description: Successfully signed up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '400':
+          description: Invalid request or sign-up deadline passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already signed up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/participants/{userId}:
+    delete:
+      tags:
+        - participants
+      summary: Cancel sign-up for a game
+      operationId: cancelSignUp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Sign-up cancelled successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Game or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/teams:
+    get:
+      tags:
+        - teams
+      summary: Get game teams
+      operationId: getGameTeams
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teams:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+        '404':
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - teams
+      summary: Create a team for the game
+      operationId: createTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /games/{gameId}/teams/{teamId}:
+    patch:
+      tags:
+        - teams
+      summary: Update team (e.g., assign players)
+      operationId: updateTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Team updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - teams
+      summary: Delete a team
+      operationId: deleteTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Team deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the game owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me:
+    get:
+      tags:
+        - users
+      summary: Get current user profile
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/games:
+    get:
+      tags:
+        - users
+      summary: Get current user's games
+      operationId: getUserGames
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          description: Filter by user's role in games
+          schema:
+            type: string
+            enum: [owner, participant, all]
+            default: all
+        - name: status
+          in: query
+          description: Filter by game status
+          schema:
+            $ref: '#/components/schemas/GameStatus'
+      responses:
+        '200':
+          description: List of user's games
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  games:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Game'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "John"
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Doe"
+        email:
+          type: string
+          format: email
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: Password must be at least 8 characters
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required:
+        - user
+      properties:
+        token:
+          type: string
+          description: JWT token (only included for mobile clients)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          type: object
+          required:
+            - id
+            - email
+            - firstName
+            - lastName
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            email:
+              type: string
+              format: email
+              example: "john.doe@example.com"
+            firstName:
+              type: string
+              example: "John"
+            lastName:
+              type: string
+              example: "Doe"
+      description: |
+        Authentication response. The token field is only present for mobile clients
+        (when X-Client-Type header is set to 'mobile'). For web clients, the token
+        is set as an HTTP-only secure cookie instead.
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+          example: "John"
+        lastName:
+          type: string
+          example: "Doe"
+        createdAt:
+          type: string
+          format: date-time
+
+    GameCategory:
+      type: string
+      enum:
+        - soccer
+        - basketball
+        - pickleball
+        - flag_football
+        - volleyball
+        - ultimate_frisbee
+        - tennis
+        - other
+
+    GameStatus:
+      type: string
+      enum:
+        - open          # Accepting sign-ups
+        - full          # Roster full, waitlist only
+        - closed        # Sign-up deadline passed
+        - in_progress   # Game is happening
+        - completed     # Game finished
+        - cancelled     # Game cancelled
+
+    PricingType:
+      type: string
+      enum:
+        - free              # No cost
+        - total             # Total amount split among participants
+        - per_person        # Fixed price per person
+
+    Location:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Venue or field name
+          example: "Golden Gate Park - Field 3"
+        address:
+          type: string
+          example: "123 Main St, San Francisco, CA 94102"
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        notes:
+          type: string
+          description: Additional location details (parking, entrance, etc.)
+
+    Pricing:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          $ref: '#/components/schemas/PricingType'
+        amountCents:
+          type: integer
+          minimum: 0
+          description: Amount in cents (0 for free)
+        currency:
+          type: string
+          default: USD
+          example: USD
+
+    CreateGameRequest:
+      type: object
+      required:
+        - category
+        - location
+        - startTime
+        - durationMinutes
+        - maxParticipants
+        - pricing
+      properties:
+        category:
+          $ref: '#/components/schemas/GameCategory'
+        title:
+          type: string
+          description: Optional custom title for the game
+          example: "Saturday Morning Soccer"
+        description:
+          type: string
+          description: Additional details about the game
+        location:
+          $ref: '#/components/schemas/Location'
+        startTime:
+          type: string
+          format: date-time
+          description: When the game starts (RFC3339)
+        durationMinutes:
+          type: integer
+          minimum: 15
+          description: How long the game will last
+          example: 90
+        maxParticipants:
+          type: integer
+          minimum: 2
+          description: Maximum number of players (excluding owner)
+        pricing:
+          $ref: '#/components/schemas/Pricing'
+        signupDeadline:
+          type: string
+          format: date-time
+          description: Deadline to sign up (defaults to startTime if not provided)
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, all]
+          default: all
+        notes:
+          type: string
+          description: Additional notes for participants
+
+    UpdateGameRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          $ref: '#/components/schemas/Location'
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 15
+        maxParticipants:
+          type: integer
+          minimum: 2
+        pricing:
+          $ref: '#/components/schemas/Pricing'
+        signupDeadline:
+          type: string
+          format: date-time
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, all]
+        notes:
+          type: string
+        status:
+          $ref: '#/components/schemas/GameStatus'
+
+    GameSummary:
+      type: object
+      description: Essential game details for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/GameCategory'
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        location:
+          $ref: '#/components/schemas/Location'
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+        maxParticipants:
+          type: integer
+        currentParticipants:
+          type: integer
+          description: Number of confirmed participants (roster, not waitlist)
+        pricing:
+          $ref: '#/components/schemas/Pricing'
+        signupDeadline:
+          type: string
+          format: date-time
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, all]
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        userParticipationStatus:
+          type: string
+          nullable: true
+          enum: [confirmed, waitlist, dropped, declined, removed]
+          description: Current user's participation status (only present if user is authenticated and has joined the game)
+
+    Game:
+      type: object
+      description: Full game details including owner, participants, and teams
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        owner:
+          $ref: '#/components/schemas/User'
+        category:
+          $ref: '#/components/schemas/GameCategory'
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        location:
+          $ref: '#/components/schemas/Location'
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+        maxParticipants:
+          type: integer
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+          description: Confirmed participants (up to maxParticipants), sorted by join time
+        waitlist:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+          description: Waitlisted participants (beyond maxParticipants), sorted by join time
+        pricing:
+          $ref: '#/components/schemas/Pricing'
+        signupDeadline:
+          type: string
+          format: date-time
+        dropDeadline:
+          type: string
+          format: date-time
+          nullable: true
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, all]
+        notes:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the game was cancelled (null if not cancelled)
+        teams:
+          type: array
+          items:
+            $ref: '#/components/schemas/Team'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SignUpRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+          description: Optional notes from the participant
+        paymentMethodId:
+          type: string
+          description: Stripe payment method ID (required if game has a cost)
+
+    ParticipantStatus:
+      type: string
+      enum:
+        - roster      # Confirmed participant
+        - waitlist    # On the waitlist
+        - cancelled   # Cancelled their participation
+
+    Participant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        user:
+          $ref: '#/components/schemas/User'
+        gameId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ParticipantStatus'
+        teamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Which team they're assigned to (null if no teams or unassigned)
+        paymentStatus:
+          type: string
+          enum: [pending, paid, refunded, not_required]
+        paymentAmountCents:
+          type: integer
+          description: Amount they paid or owe in cents
+        notes:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+        positionInWaitlist:
+          type: integer
+          nullable: true
+          description: Position in waitlist (null if on roster)
+
+    CreateTeamRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Team Red"
+        color:
+          type: string
+          description: Hex color code
+          example: "#FF0000"
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+        playerIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of participant user IDs to assign to this team
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        gameId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        createdAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code for client handling
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context

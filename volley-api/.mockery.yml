@@ -1,0 +1,10 @@
+formatter: goimports
+template: testify
+packages:
+  github.com/gabe-dev-svc/volley/ifaces:
+    config:
+      all: true
+      dir: mocks/
+      filename: "{{.InterfaceName}}.go"
+      structname: "{{.InterfaceName}}"
+      pkgname: mocks
