@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/app_bottom_nav.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -12,6 +13,7 @@ class HomeScreen extends StatelessWidget {
     final user = authProvider.user;
 
     return Scaffold(
+      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
       appBar: AppBar(
         title: const Text('Volley'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,

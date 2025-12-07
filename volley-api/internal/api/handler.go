@@ -230,7 +230,7 @@ func (h *Handler) DeleteGame(c *gin.Context) {
 	// TODO: Implement
 }
 
-// JoinGame handles POST /games/:gameId/join
+// JoinGame handles POST /games/:gameId/participation
 func (h *Handler) JoinGame(c *gin.Context) {
 	logger := LoggerFromContext(c)
 	ctx := logger.WithContext(c.Request.Context())
@@ -283,7 +283,7 @@ func (h *Handler) DropGame(c *gin.Context) {
 	logger = logger.With().Str("userId", userID).Str("gameId", gameID).Logger()
 	ctx = logger.WithContext(ctx)
 
-	result, err := h.gamesService.DropGame(ctx, gameID, userID)
+	result, err := h.gamesService.DropParticipantFromGame(ctx, gameID, userID)
 	if err != nil {
 		// Handle specific error types
 		if errors.Is(err, service.ErrTooLate) {

@@ -205,10 +205,10 @@ func convertGameRowToSummary(g repository.ListGamesInRadiusRow) models.GameSumma
 			Longitude: &lng,
 			Notes:     pgTextToStringPtr(g.LocationNotes),
 		},
-		StartTime:           g.StartTime.Time,
-		DurationMinutes:     int(g.DurationMinutes),
-		MaxParticipants:     int(g.MaxParticipants),
-		CurrentParticipants: int(g.CurrentParticipants),
+		StartTime:       g.StartTime.Time,
+		DurationMinutes: int(g.DurationMinutes),
+		MaxParticipants: int(g.MaxParticipants),
+		SignupCount:     int(g.SignupCount),
 		Pricing: models.Pricing{
 			Type:        models.PricingType(g.PricingType),
 			AmountCents: int(g.PricingAmountCents),
@@ -314,11 +314,17 @@ func (s *GamesService) CreateGame(ctx context.Context, userID string, request mo
 		return nil, fmt.Errorf("failed to create game: %w", err)
 	}
 
-	return convertCreateGameRowToModel(game), nil
+	// Fetch owner details to include in the response
+	owner, err := s.queries.GetUserByID(ctx, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game owner: %w", err)
+	}
+
+	return convertCreateGameRowToModel(game, &owner), nil
 }
 
 // convertCreateGameRowToModel converts a repository.CreateGameRow to a models.Game
-func convertCreateGameRowToModel(game repository.CreateGameRow) *models.Game {
+func convertCreateGameRowToModel(game repository.CreateGameRow, owner *repository.User) *models.Game {
 	var lat, lng *float64
 	if v, ok := game.Latitude.(float64); ok {
 		lat = &v
@@ -327,8 +333,20 @@ func convertCreateGameRowToModel(game repository.CreateGameRow) *models.Game {
 		lng = &v
 	}
 
+	var ownerModel *models.User
+	if owner != nil {
+		ownerModel = &models.User{
+			ID:        uuid.UUID(owner.ID.Bytes).String(),
+			Email:     owner.Email,
+			FirstName: owner.FirstName,
+			LastName:  owner.LastName,
+			CreatedAt: owner.CreatedAt.Time.UTC(),
+		}
+	}
+
 	return &models.Game{
 		ID:          uuid.UUID(game.ID.Bytes).String(),
+		Owner:       ownerModel,
 		Category:    models.GameCategory(game.Category),
 		Title:       pgTextToStringPtr(game.Title),
 		Description: pgTextToStringPtr(game.Description),
@@ -454,32 +472,35 @@ func (s *GamesService) GetGame(ctx context.Context, gameID string) (*models.Game
 	}
 
 	// Get all participants ordered by joined_at
-	allParticipants, err := s.queries.ListParticipantsByGame(ctx, gameUUID)
+	allParticipants, err := s.queries.ListActiveParticipantsByGame(ctx, gameUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list participants: %w", err)
 	}
 
-	// Split confirmed participants into roster and waitlist based on MaxParticipants
+	// Split confirmed participants into roster and waitlist based on their status
 	confirmedParticipants := []models.Participant{}
 	waitlist := []models.Participant{}
 	confirmedCount := 0
 
 	for _, p := range allParticipants {
+		status := models.ParticipantStatus(p.Status)
+
 		// Skip non-confirmed participants
-		if p.Status != string(models.ParticipantStatusConfirmed) {
+		if status != models.ParticipantStatusConfirmed && status != models.ParticipantStatusWaitlist {
 			continue
 		}
 
-		if confirmedCount < int(gameRow.MaxParticipants) {
-			// First N confirmed participants are on the roster
-			participant := convertParticipantRowToModelWithStatus(p, models.ParticipantStatusConfirmed, nil)
-			confirmedParticipants = append(confirmedParticipants, *participant)
-		} else {
-			// Beyond N confirmed participants are waitlisted
-			position := confirmedCount - int(gameRow.MaxParticipants) + 1
-			participant := convertParticipantRowToModelWithStatus(p, models.ParticipantStatusWaitlist, &position)
+		participant := convertParticipantDetailToModel(repository.ToParticipantDetail(p), nil)
+		if status == models.ParticipantStatusWaitlist {
+			position := len(waitlist) + 1
+			participant.WaitlistPosition = &position
 			waitlist = append(waitlist, *participant)
 		}
+
+		if status == models.ParticipantStatusConfirmed {
+			confirmedParticipants = append(confirmedParticipants, *participant)
+		}
+
 		confirmedCount++
 	}
 
@@ -632,7 +653,7 @@ func (s *GamesService) addOrUpdateParticipant(ctx context.Context, gameUUID, use
 	}
 
 	// Find existing participant record and count active participants
-	var existingParticipantRecord *repository.ListParticipantsByGameRow
+	var existingParticipantRecord *repository.ParticipantDetail
 	activeParticipants := 0
 	for _, participant := range existingParticipants {
 		if !InactiveParticipantStates[participant.Status] {
@@ -693,8 +714,8 @@ func (s *GamesService) reconcileParticipantStatuses(ctx context.Context, gameUUI
 	}
 
 	// Build lists of IDs that need updating
-	var toConfirm []pgtype.UUID   // Waitlisted participants who should be confirmed
-	var toWaitlist []pgtype.UUID  // Confirmed participants who should be waitlisted
+	var toConfirm []pgtype.UUID  // Waitlisted participants who should be confirmed
+	var toWaitlist []pgtype.UUID // Confirmed participants who should be waitlisted
 
 	activeCount := 0
 	for _, p := range participants {
@@ -825,7 +846,7 @@ func (s *GamesService) JoinGame(ctx context.Context, gameID string, userID strin
 			waitlistPosition = &waitlistCount
 		}
 
-		result = append(result, *convertParticipantRowToModelWithStatus(p, status, waitlistPosition))
+		result = append(result, *convertParticipantDetailToModel(p, waitlistPosition))
 	}
 
 	return result, nil
@@ -836,8 +857,8 @@ type DropGameResult struct {
 	PromotedUser *models.User // User promoted from waitlist (nil if no promotion)
 }
 
-// DropGame marks a user as dropped from a game and returns information about any waitlist promotions
-func (s *GamesService) DropGame(ctx context.Context, gameID string, userID string) (*DropGameResult, error) {
+// DropParticipantFromGame marks a user as dropped from a game and returns information about any waitlist promotions
+func (s *GamesService) DropParticipantFromGame(ctx context.Context, gameID string, userID string) (*DropGameResult, error) {
 	logger := log.Ctx(ctx)
 
 	// Validate game and user UUID
@@ -892,12 +913,8 @@ func (s *GamesService) DropGame(ctx context.Context, gameID string, userID strin
 		return &DropGameResult{PromotedUser: nil}, nil
 	}
 
-	// Check if there's a waitlist before dropping (to detect promotions)
-	participantsBefore, err := s.queries.ListParticipantsByGame(ctx, gameUUID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list participants before drop: %w", err)
-	}
-	hasWaitlist := len(participantsBefore) > int(game.MaxParticipants)
+	// Check if user was confirmed (for promotion detection)
+	wasConfirmed := participant.Status == string(models.ParticipantStatusConfirmed)
 
 	// Update participant status to dropped
 	_, err = s.queries.UpdateParticipantStatus(ctx, repository.UpdateParticipantStatusParams{
@@ -912,25 +929,53 @@ func (s *GamesService) DropGame(ctx context.Context, gameID string, userID strin
 
 	result := &DropGameResult{PromotedUser: nil}
 
-	// Check for promotion if there was a waitlist
-	if hasWaitlist {
-		// Get new participant list after drop
-		participantsAfter, err := s.queries.ListParticipantsByGame(ctx, gameUUID)
-		if err != nil {
+	// Reconcile participant statuses to promote from waitlist if needed
+	// This only does work if a confirmed participant dropped and there's a waitlist
+	if wasConfirmed && s.pool != nil {
+		if err := s.reconcileParticipantStatuses(ctx, gameUUID, game.MaxParticipants); err != nil {
 			// Don't fail the drop operation, just log the error
-			logger.Error().Err(err).Msg("Failed to get participants after drop for promotion detection")
+			logger.Error().Err(err).Msg("Failed to reconcile participant statuses after drop")
 			return result, nil
 		}
+	}
 
-		// If we still have max_participants or more, the person at position max_participants was promoted
-		if len(participantsAfter) >= int(game.MaxParticipants) {
-			// The person at index (max_participants - 1) is the last confirmed person (was first on waitlist)
-			promotedParticipant := participantsAfter[game.MaxParticipants-1]
+	// Get updated participant list to detect promotion
+	participantsAfter, err := s.queries.ListParticipantsByGame(ctx, gameUUID)
+	if err != nil {
+		// Don't fail the drop operation, just log the error
+		logger.Error().Err(err).Msg("Failed to get participants after drop for promotion detection")
+		return result, nil
+	}
+
+	// Find who got promoted (if anyone)
+	// When a confirmed user drops, the person at position (maxParticipants) would be promoted
+	if wasConfirmed {
+		// Count active participants to find the last confirmed spot
+		activeCount := 0
+		var lastConfirmed *repository.ParticipantDetail
+		for _, p := range participantsAfter {
+			// Skip inactive participants (including the one we just dropped)
+			if InactiveParticipantStates[p.Status] {
+				continue
+			}
+
+			// Count all active participants (both confirmed and waitlist)
+			// The person at position maxParticipants is the promoted one
+			activeCount++
+			if activeCount == int(game.MaxParticipants) {
+				pCopy := p
+				lastConfirmed = &pCopy
+			}
+		}
+
+		// If we have at least maxParticipants active participants after the drop,
+		// the person at position maxParticipants was promoted from waitlist
+		if lastConfirmed != nil && lastConfirmed.UserID != userUUID {
 			result.PromotedUser = &models.User{
-				ID:        uuid.UUID(promotedParticipant.UserID.Bytes).String(),
-				Email:     promotedParticipant.Email,
-				FirstName: promotedParticipant.FirstName,
-				LastName:  promotedParticipant.LastName,
+				ID:        uuid.UUID(lastConfirmed.UserID.Bytes).String(),
+				Email:     lastConfirmed.Email,
+				FirstName: lastConfirmed.FirstName,
+				LastName:  lastConfirmed.LastName,
 			}
 			logger.Info().
 				Str("promotedUserId", result.PromotedUser.ID).
@@ -942,8 +987,8 @@ func (s *GamesService) DropGame(ctx context.Context, gameID string, userID strin
 	return result, nil
 }
 
-// convertParticipantRowToModelWithStatus converts a repository.ListParticipantsByGameRow to a models.Participant with computed status
-func convertParticipantRowToModelWithStatus(p repository.ListParticipantsByGameRow, status models.ParticipantStatus, waitlistPosition *int) *models.Participant {
+// convertParticipantDetailToModel converts a repository.ParticipantDetail to a models.Participant
+func convertParticipantDetailToModel(p repository.ParticipantDetail, waitlistPosition *int) *models.Participant {
 	var teamID *string
 	if p.TeamID.Valid {
 		id := uuid.UUID(p.TeamID.Bytes).String()
@@ -964,7 +1009,7 @@ func convertParticipantRowToModelWithStatus(p repository.ListParticipantsByGameR
 			LastName:  p.LastName,
 		},
 		TeamID:             teamID,
-		Status:             status,
+		Status:             models.ParticipantStatus(p.Status),
 		WaitlistPosition:   waitlistPosition,
 		Paid:               p.Paid,
 		PaymentAmountCents: paymentCents,

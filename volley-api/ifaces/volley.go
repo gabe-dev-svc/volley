@@ -34,6 +34,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (repository.User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (repository.User, error)
 	ListGamesInRadius(ctx context.Context, arg repository.ListGamesInRadiusParams) ([]repository.ListGamesInRadiusRow, error)
+	ListActiveParticipantsByGame(ctx context.Context, gameID pgtype.UUID) ([]repository.ListActiveParticipantsByGameRow, error)
 	ListParticipantsByGame(ctx context.Context, gameID pgtype.UUID) ([]repository.ListParticipantsByGameRow, error)
 	ListParticipantsByUser(ctx context.Context, userID pgtype.UUID) ([]repository.Participant, error)
 	ListTeamsByGame(ctx context.Context, gameID pgtype.UUID) ([]repository.Team, error)

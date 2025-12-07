@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../services/game_service.dart';
 import '../services/location_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 
 class CreateGameScreen extends StatefulWidget {
   const CreateGameScreen({super.key});
@@ -305,6 +306,7 @@ class _CreateGameScreenState extends State<CreateGameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
       appBar: AppBar(
         title: const Text('Create Game'),
         actions: [

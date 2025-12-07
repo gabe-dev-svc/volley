@@ -6,6 +6,7 @@ import '../models/game.dart';
 import '../providers/game_provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 
 class GamesNearYouScreen extends StatefulWidget {
   const GamesNearYouScreen({super.key});
@@ -127,6 +128,7 @@ class _GamesNearYouScreenState extends State<GamesNearYouScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -440,17 +442,47 @@ class _GameCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  categoryIcon,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
+              Row(
+                children: [
+                  if (game.userParticipationStatus != null &&
+                      (game.userParticipationStatus == 'confirmed' ||
+                       game.userParticipationStatus == 'waitlist')) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: game.userParticipationStatus == 'confirmed'
+                            ? Colors.green.shade100
+                            : Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        game.userParticipationStatus == 'confirmed'
+                            ? 'Confirmed'
+                            : 'Waitlist',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: game.userParticipationStatus == 'confirmed'
+                              ? Colors.green.shade700
+                              : Colors.orange.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      categoryIcon,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -522,7 +554,7 @@ class _GameCard extends StatelessWidget {
                   const Icon(Icons.people, size: 18, color: AppColors.textPrimary),
                   const SizedBox(width: 4),
                   Text(
-                    '${game.currentParticipants}/${game.maxParticipants}',
+                    '${game.signupCount}/${game.maxParticipants}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,

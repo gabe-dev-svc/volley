@@ -611,9 +611,29 @@ class _GameDetailsScreenState extends State<GameDetailsScreen> {
 
   Widget _buildJoinButton() {
     final game = _game!;
-    final priceText = game.pricing.isFree
-        ? 'Join Game'
-        : 'Join Game - ${game.pricing.displayPrice}';
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // Check if user is a participant
+    final currentUserId = authProvider.user?.id;
+    final isUserJoined = currentUserId != null &&
+        (game.confirmedParticipants.any((p) => p['id'] == currentUserId) ||
+         game.waitlist.any((p) => p['id'] == currentUserId));
+
+    String buttonText;
+    Color buttonColor;
+    VoidCallback? onPressed;
+
+    if (isUserJoined) {
+      buttonText = 'Drop From Game';
+      buttonColor = Colors.red;
+      onPressed = () => _showDropConfirmationDialog();
+    } else {
+      buttonText = game.pricing.isFree
+          ? 'Join Game'
+          : 'Join Game - ${game.pricing.displayPrice}';
+      buttonColor = AppColors.success;
+      onPressed = () => _handleJoinGame();
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -629,18 +649,16 @@ class _GameDetailsScreenState extends State<GameDetailsScreen> {
       ),
       child: SafeArea(
         child: ElevatedButton(
-          onPressed: () {
-            // TODO: Implement join game
-          },
+          onPressed: onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.success,
+            backgroundColor: buttonColor,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
           ),
           child: Text(
-            priceText,
+            buttonText,
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -650,5 +668,142 @@ class _GameDetailsScreenState extends State<GameDetailsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleJoinGame() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    if (!authProvider.isAuthenticated) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to join a game'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get auth token
+    final token = await authProvider.getToken();
+    if (token == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Authentication error. Please login again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _gameService.joinGame(widget.gameId, token);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Successfully joined game!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Reload game details to reflect the change
+        _loadGameDetails();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to join game: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDropConfirmationDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Drop From Game'),
+        content: const Text(
+          'Are you sure you want to drop from this game? You will lose your position entirely and cannot rejoin if the game is full.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Drop'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _handleDropGame();
+    }
+  }
+
+  Future<void> _handleDropGame() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    if (!authProvider.isAuthenticated) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to drop from a game'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get auth token
+    final token = await authProvider.getToken();
+    if (token == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Authentication error. Please login again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _gameService.leaveGame(widget.gameId, token);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Successfully dropped from game'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Reload game details to reflect the change
+        _loadGameDetails();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to drop from game: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

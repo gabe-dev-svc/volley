@@ -123,7 +123,7 @@ INSERT INTO games (
 RETURNING id, owner_id, category, title, description, location_name, location_address,
     ST_Y(location_point::geometry) as latitude, ST_X(location_point::geometry) as longitude,
     location_notes, start_time, duration_minutes, max_participants,
-    0 as current_participants, 0 as waitlist_count,
+    0 as confirmed_count, 0 as waitlist_count,
     pricing_type, pricing_amount_cents, pricing_currency, signup_deadline,
     drop_deadline, skill_level, notes, status, cancelled_at, created_at, updated_at
 `
@@ -152,32 +152,32 @@ type CreateGameParams struct {
 }
 
 type CreateGameRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Category            string             `json:"category"`
-	Title               pgtype.Text        `json:"title"`
-	Description         pgtype.Text        `json:"description"`
-	LocationName        string             `json:"location_name"`
-	LocationAddress     pgtype.Text        `json:"location_address"`
-	Latitude            interface{}        `json:"latitude"`
-	Longitude           interface{}        `json:"longitude"`
-	LocationNotes       pgtype.Text        `json:"location_notes"`
-	StartTime           pgtype.Timestamptz `json:"start_time"`
-	DurationMinutes     int32              `json:"duration_minutes"`
-	MaxParticipants     int32              `json:"max_participants"`
-	CurrentParticipants int32              `json:"current_participants"`
-	WaitlistCount       int32              `json:"waitlist_count"`
-	PricingType         string             `json:"pricing_type"`
-	PricingAmountCents  int32              `json:"pricing_amount_cents"`
-	PricingCurrency     string             `json:"pricing_currency"`
-	SignupDeadline      pgtype.Timestamptz `json:"signup_deadline"`
-	DropDeadline        pgtype.Timestamptz `json:"drop_deadline"`
-	SkillLevel          string             `json:"skill_level"`
-	Notes               pgtype.Text        `json:"notes"`
-	Status              string             `json:"status"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	OwnerID            pgtype.UUID        `json:"owner_id"`
+	Category           string             `json:"category"`
+	Title              pgtype.Text        `json:"title"`
+	Description        pgtype.Text        `json:"description"`
+	LocationName       string             `json:"location_name"`
+	LocationAddress    pgtype.Text        `json:"location_address"`
+	Latitude           interface{}        `json:"latitude"`
+	Longitude          interface{}        `json:"longitude"`
+	LocationNotes      pgtype.Text        `json:"location_notes"`
+	StartTime          pgtype.Timestamptz `json:"start_time"`
+	DurationMinutes    int32              `json:"duration_minutes"`
+	MaxParticipants    int32              `json:"max_participants"`
+	ConfirmedCount     int32              `json:"confirmed_count"`
+	WaitlistCount      int32              `json:"waitlist_count"`
+	PricingType        string             `json:"pricing_type"`
+	PricingAmountCents int32              `json:"pricing_amount_cents"`
+	PricingCurrency    string             `json:"pricing_currency"`
+	SignupDeadline     pgtype.Timestamptz `json:"signup_deadline"`
+	DropDeadline       pgtype.Timestamptz `json:"drop_deadline"`
+	SkillLevel         string             `json:"skill_level"`
+	Notes              pgtype.Text        `json:"notes"`
+	Status             string             `json:"status"`
+	CancelledAt        pgtype.Timestamptz `json:"cancelled_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Game queries
@@ -219,7 +219,7 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (CreateG
 		&i.StartTime,
 		&i.DurationMinutes,
 		&i.MaxParticipants,
-		&i.CurrentParticipants,
+		&i.ConfirmedCount,
 		&i.WaitlistCount,
 		&i.PricingType,
 		&i.PricingAmountCents,
@@ -402,7 +402,7 @@ SELECT
     g.id, g.owner_id, g.category, g.title, g.description, g.location_name, g.location_address,
     ST_Y(g.location_point::geometry) as latitude, ST_X(g.location_point::geometry) as longitude,
     g.location_notes, g.start_time, g.duration_minutes, g.max_participants,
-    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as current_participants,
+    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as confirmed_count,
     COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'waitlist'), 0)::int as waitlist_count,
     g.pricing_type, g.pricing_amount_cents, g.pricing_currency, g.signup_deadline,
     g.drop_deadline, g.skill_level, g.notes, g.status, g.cancelled_at, g.created_at, g.updated_at
@@ -413,32 +413,32 @@ GROUP BY g.id
 `
 
 type GetGameRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	OwnerID             pgtype.UUID        `json:"owner_id"`
-	Category            string             `json:"category"`
-	Title               pgtype.Text        `json:"title"`
-	Description         pgtype.Text        `json:"description"`
-	LocationName        string             `json:"location_name"`
-	LocationAddress     pgtype.Text        `json:"location_address"`
-	Latitude            interface{}        `json:"latitude"`
-	Longitude           interface{}        `json:"longitude"`
-	LocationNotes       pgtype.Text        `json:"location_notes"`
-	StartTime           pgtype.Timestamptz `json:"start_time"`
-	DurationMinutes     int32              `json:"duration_minutes"`
-	MaxParticipants     int32              `json:"max_participants"`
-	CurrentParticipants int32              `json:"current_participants"`
-	WaitlistCount       int32              `json:"waitlist_count"`
-	PricingType         string             `json:"pricing_type"`
-	PricingAmountCents  int32              `json:"pricing_amount_cents"`
-	PricingCurrency     string             `json:"pricing_currency"`
-	SignupDeadline      pgtype.Timestamptz `json:"signup_deadline"`
-	DropDeadline        pgtype.Timestamptz `json:"drop_deadline"`
-	SkillLevel          string             `json:"skill_level"`
-	Notes               pgtype.Text        `json:"notes"`
-	Status              string             `json:"status"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	OwnerID            pgtype.UUID        `json:"owner_id"`
+	Category           string             `json:"category"`
+	Title              pgtype.Text        `json:"title"`
+	Description        pgtype.Text        `json:"description"`
+	LocationName       string             `json:"location_name"`
+	LocationAddress    pgtype.Text        `json:"location_address"`
+	Latitude           interface{}        `json:"latitude"`
+	Longitude          interface{}        `json:"longitude"`
+	LocationNotes      pgtype.Text        `json:"location_notes"`
+	StartTime          pgtype.Timestamptz `json:"start_time"`
+	DurationMinutes    int32              `json:"duration_minutes"`
+	MaxParticipants    int32              `json:"max_participants"`
+	ConfirmedCount     int32              `json:"confirmed_count"`
+	WaitlistCount      int32              `json:"waitlist_count"`
+	PricingType        string             `json:"pricing_type"`
+	PricingAmountCents int32              `json:"pricing_amount_cents"`
+	PricingCurrency    string             `json:"pricing_currency"`
+	SignupDeadline     pgtype.Timestamptz `json:"signup_deadline"`
+	DropDeadline       pgtype.Timestamptz `json:"drop_deadline"`
+	SkillLevel         string             `json:"skill_level"`
+	Notes              pgtype.Text        `json:"notes"`
+	Status             string             `json:"status"`
+	CancelledAt        pgtype.Timestamptz `json:"cancelled_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (GetGameRow, error) {
@@ -458,7 +458,7 @@ func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (GetGameRow, erro
 		&i.StartTime,
 		&i.DurationMinutes,
 		&i.MaxParticipants,
-		&i.CurrentParticipants,
+		&i.ConfirmedCount,
 		&i.WaitlistCount,
 		&i.PricingType,
 		&i.PricingAmountCents,
@@ -653,17 +653,89 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	return i, err
 }
 
+const listActiveParticipantsByGame = `-- name: ListActiveParticipantsByGame :many
+SELECT
+    p.id,
+    p.game_id,
+    p.user_id,
+    p.team_id,
+    p.status,
+    p.paid,
+    p.payment_amount_cents,
+    p.notes,
+    p.joined_at,
+    p.updated_at,
+    u.email,
+    u.first_name,
+    u.last_name
+FROM participants p
+INNER JOIN users u ON p.user_id = u.id
+WHERE p.game_id = $1
+AND p.status in ('confirmed', 'waitlist')
+ORDER BY p.joined_at ASC
+`
+
+type ListActiveParticipantsByGameRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	GameID             pgtype.UUID        `json:"game_id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	TeamID             pgtype.UUID        `json:"team_id"`
+	Status             string             `json:"status"`
+	Paid               bool               `json:"paid"`
+	PaymentAmountCents pgtype.Int4        `json:"payment_amount_cents"`
+	Notes              pgtype.Text        `json:"notes"`
+	JoinedAt           pgtype.Timestamptz `json:"joined_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	Email              string             `json:"email"`
+	FirstName          string             `json:"first_name"`
+	LastName           string             `json:"last_name"`
+}
+
+func (q *Queries) ListActiveParticipantsByGame(ctx context.Context, gameID pgtype.UUID) ([]ListActiveParticipantsByGameRow, error) {
+	rows, err := q.db.Query(ctx, listActiveParticipantsByGame, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveParticipantsByGameRow{}
+	for rows.Next() {
+		var i ListActiveParticipantsByGameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.UserID,
+			&i.TeamID,
+			&i.Status,
+			&i.Paid,
+			&i.PaymentAmountCents,
+			&i.Notes,
+			&i.JoinedAt,
+			&i.UpdatedAt,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGamesInRadius = `-- name: ListGamesInRadius :many
 SELECT
     g.id, g.owner_id, g.category, g.title, g.description, g.location_name, g.location_address,
     ST_Y(g.location_point::geometry) as latitude, ST_X(g.location_point::geometry) as longitude,
     g.location_notes, g.start_time, g.duration_minutes, g.max_participants,
-    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as current_participants,
+    COALESCE(COUNT(p.id))::int as signup_count,
     g.pricing_type, g.pricing_amount_cents, g.pricing_currency, g.signup_deadline,
     g.drop_deadline, g.skill_level, g.notes, g.status, g.cancelled_at, g.created_at, g.updated_at,
     up.status as user_participation_status
 FROM games g
-LEFT JOIN participants p ON p.game_id = g.id AND p.status = 'confirmed'
+LEFT JOIN participants p ON p.game_id = g.id AND p.status in ('confirmed', 'waitlist')
 LEFT JOIN participants up ON up.game_id = g.id AND up.user_id = $1
 WHERE ST_DWithin(
     g.location_point,
@@ -706,7 +778,7 @@ type ListGamesInRadiusRow struct {
 	StartTime               pgtype.Timestamptz `json:"start_time"`
 	DurationMinutes         int32              `json:"duration_minutes"`
 	MaxParticipants         int32              `json:"max_participants"`
-	CurrentParticipants     int32              `json:"current_participants"`
+	SignupCount             int32              `json:"signup_count"`
 	PricingType             string             `json:"pricing_type"`
 	PricingAmountCents      int32              `json:"pricing_amount_cents"`
 	PricingCurrency         string             `json:"pricing_currency"`
@@ -755,7 +827,7 @@ func (q *Queries) ListGamesInRadius(ctx context.Context, arg ListGamesInRadiusPa
 			&i.StartTime,
 			&i.DurationMinutes,
 			&i.MaxParticipants,
-			&i.CurrentParticipants,
+			&i.SignupCount,
 			&i.PricingType,
 			&i.PricingAmountCents,
 			&i.PricingCurrency,

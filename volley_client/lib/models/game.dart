@@ -247,7 +247,7 @@ class GameSummary {
   final DateTime startTime;
   final int durationMinutes;
   final int maxParticipants;
-  final int currentParticipants;
+  final int signupCount;
   final Pricing pricing;
   final DateTime signupDeadline;
   final SkillLevel skillLevel;
@@ -263,7 +263,7 @@ class GameSummary {
     required this.startTime,
     required this.durationMinutes,
     required this.maxParticipants,
-    required this.currentParticipants,
+    required this.signupCount,
     required this.pricing,
     required this.signupDeadline,
     required this.skillLevel,
@@ -285,8 +285,8 @@ class GameSummary {
       maxParticipants: json['maxParticipants'] != null
           ? (json['maxParticipants'] as num).toInt()
           : 0,
-      currentParticipants: json['currentParticipants'] != null
-          ? (json['currentParticipants'] as num).toInt()
+      signupCount: json['signupCount'] != null
+          ? (json['signupCount'] as num).toInt()
           : 0,
       pricing: Pricing.fromJson(json['pricing'] as Map<String, dynamic>),
       signupDeadline: DateTime.parse(json['signupDeadline'] as String),
@@ -296,7 +296,7 @@ class GameSummary {
     );
   }
 
-  bool get isFull => currentParticipants >= maxParticipants;
+  bool get isFull => signupCount >= maxParticipants;
   bool get isUserJoined => userParticipationStatus != null &&
       (userParticipationStatus == 'confirmed' || userParticipationStatus == 'waitlist');
 }

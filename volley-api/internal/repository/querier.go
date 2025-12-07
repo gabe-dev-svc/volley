@@ -33,6 +33,7 @@ type Querier interface {
 	GetTeam(ctx context.Context, id pgtype.UUID) (Team, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	ListActiveParticipantsByGame(ctx context.Context, gameID pgtype.UUID) ([]ListActiveParticipantsByGameRow, error)
 	ListGamesInRadius(ctx context.Context, arg ListGamesInRadiusParams) ([]ListGamesInRadiusRow, error)
 	ListParticipantsByGame(ctx context.Context, gameID pgtype.UUID) ([]ListParticipantsByGameRow, error)
 	ListParticipantsByGames(ctx context.Context, gameIds []pgtype.UUID) ([]ListParticipantsByGamesRow, error)

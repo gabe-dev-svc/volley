@@ -36,10 +36,10 @@ func createTestUUID(t *testing.T, id string) pgtype.UUID {
 	}
 }
 
-func createTestParticipant(userID, email, firstName, lastName string, joinedAt time.Time) repository.ListParticipantsByGameRow {
+func createTestParticipant(userID, email, firstName, lastName string, joinedAt time.Time) repository.ParticipantDetail {
 	u, _ := uuid.Parse(userID)
 
-	return repository.ListParticipantsByGameRow{
+	return repository.ParticipantDetail{
 		UserID: pgtype.UUID{
 			Bytes: u,
 			Valid: true,
@@ -48,6 +48,7 @@ func createTestParticipant(userID, email, firstName, lastName string, joinedAt t
 		FirstName: firstName,
 		LastName:  lastName,
 		JoinedAt:  pgtype.Timestamptz{Time: joinedAt, Valid: true},
+		Status:    string(models.ParticipantStatusConfirmed), // Default to confirmed
 	}
 }
 
@@ -66,8 +67,8 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 	tests := []struct {
 		name                   string
 		maxParticipants        int32
-		participantsBefore     []repository.ListParticipantsByGameRow
-		participantsAfter      []repository.ListParticipantsByGameRow
+		participantsBefore     []repository.ParticipantDetail
+		participantsAfter      []repository.ParticipantDetail
 		droppingUserStatus     string
 		expectPromotion        bool
 		expectedPromotedUserID string
@@ -76,12 +77,12 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 		{
 			name:            "Game at capacity with waitlist - promotion occurs",
 			maxParticipants: 2,
-			participantsBefore: []repository.ListParticipantsByGameRow{
+			participantsBefore: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000002", "user1@test.com", "User", "One", now.Add(-3*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000003", "waitlist@test.com", "Waitlist", "User", now.Add(-1*time.Hour)),
 			},
-			participantsAfter: []repository.ListParticipantsByGameRow{
+			participantsAfter: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000003", "waitlist@test.com", "Waitlist", "User", now.Add(-1*time.Hour)),
 			},
@@ -93,11 +94,11 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 		{
 			name:            "Game at capacity, no waitlist - no promotion",
 			maxParticipants: 2,
-			participantsBefore: []repository.ListParticipantsByGameRow{
+			participantsBefore: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000002", "user1@test.com", "User", "One", now.Add(-3*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 			},
-			participantsAfter: []repository.ListParticipantsByGameRow{
+			participantsAfter: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 			},
 			droppingUserStatus: string(models.ParticipantStatusConfirmed),
@@ -107,11 +108,11 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 		{
 			name:            "Game below capacity - no promotion",
 			maxParticipants: 5,
-			participantsBefore: []repository.ListParticipantsByGameRow{
+			participantsBefore: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000002", "user1@test.com", "User", "One", now.Add(-3*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 			},
-			participantsAfter: []repository.ListParticipantsByGameRow{
+			participantsAfter: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 			},
 			droppingUserStatus: string(models.ParticipantStatusConfirmed),
@@ -121,13 +122,13 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 		{
 			name:            "Multiple waitlisted users - first one gets promoted",
 			maxParticipants: 2,
-			participantsBefore: []repository.ListParticipantsByGameRow{
+			participantsBefore: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000002", "user1@test.com", "User", "One", now.Add(-5*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-4*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000003", "waitlist1@test.com", "Waitlist", "One", now.Add(-3*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000005", "waitlist2@test.com", "Waitlist", "Two", now.Add(-2*time.Hour)),
 			},
-			participantsAfter: []repository.ListParticipantsByGameRow{
+			participantsAfter: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-4*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000003", "waitlist1@test.com", "Waitlist", "One", now.Add(-3*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000005", "waitlist2@test.com", "Waitlist", "Two", now.Add(-2*time.Hour)),
@@ -140,7 +141,7 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 		{
 			name:            "User already dropped - idempotent, no promotion",
 			maxParticipants: 2,
-			participantsBefore: []repository.ListParticipantsByGameRow{
+			participantsBefore: []repository.ParticipantDetail{
 				createTestParticipant("00000000-0000-0000-0000-000000000004", "user2@test.com", "User", "Two", now.Add(-2*time.Hour)),
 				createTestParticipant("00000000-0000-0000-0000-000000000003", "waitlist@test.com", "Waitlist", "User", now.Add(-1*time.Hour)),
 			},
@@ -180,23 +181,19 @@ func TestDropGame_WaitlistPromotion(t *testing.T) {
 			if tt.droppingUserStatus == string(models.ParticipantStatusDropped) {
 				// No more mocks needed
 			} else {
-				// Mock ListParticipantsByGame (before drop)
-				mockQuerier.On("ListParticipantsByGame", ctx, gameUUID).Return(tt.participantsBefore, nil).Once()
-
 				// Mock UpdateParticipantStatus
 				mockQuerier.On("UpdateParticipantStatus", ctx, repository.UpdateParticipantStatusParams{
 					ID:     participantID,
 					Status: string(models.ParticipantStatusDropped),
 				}).Return(repository.Participant{}, nil)
 
-				// Mock ListParticipantsByGame (after drop) - only if there was a waitlist
-				if len(tt.participantsBefore) > int(tt.maxParticipants) {
-					mockQuerier.On("ListParticipantsByGame", ctx, gameUUID).Return(tt.participantsAfter, nil).Once()
-				}
+				// Mock ListParticipantsByGame (after drop) for promotion detection
+				// This is always called to check for promotions
+				mockQuerier.On("ListParticipantsByGame", ctx, gameUUID).Return(tt.participantsAfter, nil).Once()
 			}
 
 			// Execute
-			result, err := service.DropGame(ctx, gameID, userID)
+			result, err := service.DropParticipantFromGame(ctx, gameID, userID)
 
 			// Assert
 			if tt.expectedError != nil {
@@ -287,7 +284,7 @@ func TestDropGame_Errors(t *testing.T) {
 			tt.setupMocks(mockQuerier)
 
 			// Execute
-			result, err := service.DropGame(ctx, gameID, userID)
+			result, err := service.DropParticipantFromGame(ctx, gameID, userID)
 
 			// Assert
 			assert.ErrorIs(t, err, tt.expectedError)
@@ -310,7 +307,7 @@ func TestCancelGame_Success(t *testing.T) {
 		name                 string
 		gameStatus           string
 		startTime            time.Time
-		participants         []repository.ListParticipantsByGameRow
+		participants         []repository.ParticipantDetail
 		expectedNotifyCount  int
 		expectCancelGameCall bool
 		description          string
@@ -319,7 +316,7 @@ func TestCancelGame_Success(t *testing.T) {
 			name:       "Cancel open game with participants",
 			gameStatus: string(models.GameStatusOpen),
 			startTime:  time.Now().Add(2 * time.Hour),
-			participants: []repository.ListParticipantsByGameRow{
+			participants: []repository.ParticipantDetail{
 				createTestParticipant("550e8400-e29b-41d4-a716-446655440010", "user1@example.com", "John", "Doe", time.Now()),
 				createTestParticipant("550e8400-e29b-41d4-a716-446655440011", "user2@example.com", "Jane", "Smith", time.Now()),
 			},
@@ -331,7 +328,7 @@ func TestCancelGame_Success(t *testing.T) {
 			name:                 "Cancel game with no participants",
 			gameStatus:           string(models.GameStatusOpen),
 			startTime:            time.Now().Add(2 * time.Hour),
-			participants:         []repository.ListParticipantsByGameRow{},
+			participants:         []repository.ParticipantDetail{},
 			expectedNotifyCount:  0,
 			expectCancelGameCall: true,
 			description:          "Should cancel game even with no participants",

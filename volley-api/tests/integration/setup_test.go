@@ -21,11 +21,11 @@ import (
 )
 
 var (
-	testServer     *http.Server
-	testBaseURL    string
-	testDBPool     *pgxpool.Pool
-	testContainer  *postgres.PostgresContainer
-	testCtx        context.Context
+	testServer    *http.Server
+	testBaseURL   string
+	testDBPool    *pgxpool.Pool
+	testContainer *postgres.PostgresContainer
+	testCtx       context.Context
 )
 
 func TestMain(m *testing.M) {
@@ -80,7 +80,7 @@ func TestMain(m *testing.M) {
 	queries := repository.New(testDBPool)
 	gamesService := service.NewGamesService(queries, testDBPool)
 	userService := service.NewUserService(queries)
-	handler := api.NewHandler(gamesService, userService)
+	handler := api.NewHandler(gamesService, userService, "")
 
 	// Set up router with middleware
 	router := gin.New()

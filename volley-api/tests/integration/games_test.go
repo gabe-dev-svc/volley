@@ -24,9 +24,9 @@ func TestCreateGame_Success(t *testing.T) {
 	skillLevel := models.SkillLevelAll
 
 	req := models.CreateGameRequest{
-		Category:        models.GameCategoryBasketball,
-		Title:           strPtr("Pickup Basketball"),
-		Description:     strPtr("Casual game at the park"),
+		Category:    models.GameCategoryBasketball,
+		Title:       strPtr("Pickup Basketball"),
+		Description: strPtr("Casual game at the park"),
 		Location: models.Location{
 			Name:      "Central Park Basketball Court",
 			Address:   strPtr("123 Main St"),
@@ -53,8 +53,8 @@ func TestCreateGame_Success(t *testing.T) {
 	if game.Category != models.GameCategoryBasketball {
 		t.Errorf("expected category %s, got %s", models.GameCategoryBasketball, game.Category)
 	}
-	if game.OwnerID != authResp.User.ID {
-		t.Errorf("expected owner %s, got %s", authResp.User.ID, game.OwnerID)
+	if game.Owner.ID != authResp.User.ID {
+		t.Errorf("expected owner %s, got %s", authResp.User.ID, game.Owner.ID)
 	}
 	if game.Status != models.GameStatusOpen {
 		t.Errorf("expected status %s, got %s", models.GameStatusOpen, game.Status)

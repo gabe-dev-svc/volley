@@ -115,7 +115,7 @@ type GameSummary struct {
 	StartTime               time.Time          `json:"startTime"`                         // Game start time
 	DurationMinutes         int                `json:"durationMinutes"`                   // Duration in minutes
 	MaxParticipants         int                `json:"maxParticipants"`                   // Maximum number of players
-	CurrentParticipants     int                `json:"currentParticipants"`               // Count of confirmed participants
+	SignupCount             int                `json:"signupCount"`                       // Number of participants signed up
 	Pricing                 Pricing            `json:"pricing"`                           // Pricing details
 	SignupDeadline          time.Time          `json:"signupDeadline"`                    // Sign-up deadline
 	SkillLevel              SkillLevel         `json:"skillLevel"`                        // Required skill level

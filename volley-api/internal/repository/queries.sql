@@ -79,7 +79,7 @@ INSERT INTO games (
 RETURNING id, owner_id, category, title, description, location_name, location_address,
     ST_Y(location_point::geometry) as latitude, ST_X(location_point::geometry) as longitude,
     location_notes, start_time, duration_minutes, max_participants,
-    0 as current_participants, 0 as waitlist_count,
+    0 as confirmed_count, 0 as waitlist_count,
     pricing_type, pricing_amount_cents, pricing_currency, signup_deadline,
     drop_deadline, skill_level, notes, status, cancelled_at, created_at, updated_at;
 
@@ -88,7 +88,7 @@ SELECT
     g.id, g.owner_id, g.category, g.title, g.description, g.location_name, g.location_address,
     ST_Y(g.location_point::geometry) as latitude, ST_X(g.location_point::geometry) as longitude,
     g.location_notes, g.start_time, g.duration_minutes, g.max_participants,
-    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as current_participants,
+    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as confirmed_count,
     COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'waitlist'), 0)::int as waitlist_count,
     g.pricing_type, g.pricing_amount_cents, g.pricing_currency, g.signup_deadline,
     g.drop_deadline, g.skill_level, g.notes, g.status, g.cancelled_at, g.created_at, g.updated_at
@@ -113,12 +113,12 @@ SELECT
     g.id, g.owner_id, g.category, g.title, g.description, g.location_name, g.location_address,
     ST_Y(g.location_point::geometry) as latitude, ST_X(g.location_point::geometry) as longitude,
     g.location_notes, g.start_time, g.duration_minutes, g.max_participants,
-    COALESCE(COUNT(p.id) FILTER (WHERE p.status = 'confirmed'), 0)::int as current_participants,
+    COALESCE(COUNT(p.id))::int as signup_count,
     g.pricing_type, g.pricing_amount_cents, g.pricing_currency, g.signup_deadline,
     g.drop_deadline, g.skill_level, g.notes, g.status, g.cancelled_at, g.created_at, g.updated_at,
     up.status as user_participation_status
 FROM games g
-LEFT JOIN participants p ON p.game_id = g.id AND p.status = 'confirmed'
+LEFT JOIN participants p ON p.game_id = g.id AND p.status in ('confirmed', 'waitlist')
 LEFT JOIN participants up ON up.game_id = g.id AND up.user_id = sqlc.narg('user_id')
 WHERE ST_DWithin(
     g.location_point,
@@ -238,6 +238,27 @@ SELECT
 FROM participants p
 INNER JOIN users u ON p.user_id = u.id
 WHERE p.game_id = $1
+ORDER BY p.joined_at ASC;
+
+-- name: ListActiveParticipantsByGame :many
+SELECT
+    p.id,
+    p.game_id,
+    p.user_id,
+    p.team_id,
+    p.status,
+    p.paid,
+    p.payment_amount_cents,
+    p.notes,
+    p.joined_at,
+    p.updated_at,
+    u.email,
+    u.first_name,
+    u.last_name
+FROM participants p
+INNER JOIN users u ON p.user_id = u.id
+WHERE p.game_id = $1
+AND p.status in ('confirmed', 'waitlist')
 ORDER BY p.joined_at ASC;
 
 -- name: ListParticipantsByUser :many
