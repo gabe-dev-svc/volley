@@ -19,9 +19,12 @@ type Querier interface {
 	// Game queries
 	CreateGame(ctx context.Context, arg CreateGameParams) (CreateGameRow, error)
 	CreateParticipant(ctx context.Context, arg CreateParticipantParams) (Participant, error)
+	// Refresh token queries
+	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateTeam(ctx context.Context, arg CreateTeamParams) (Team, error)
 	// User queries
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteGame(ctx context.Context, id pgtype.UUID) error
 	DeleteParticipant(ctx context.Context, id pgtype.UUID) error
 	DeleteTeam(ctx context.Context, id pgtype.UUID) error
@@ -30,6 +33,7 @@ type Querier interface {
 	GetGameForUpdate(ctx context.Context, id pgtype.UUID) (GetGameForUpdateRow, error)
 	GetParticipant(ctx context.Context, id pgtype.UUID) (Participant, error)
 	GetParticipantByGameAndUser(ctx context.Context, arg GetParticipantByGameAndUserParams) (Participant, error)
+	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetTeam(ctx context.Context, id pgtype.UUID) (Team, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
@@ -39,6 +43,8 @@ type Querier interface {
 	ListParticipantsByGames(ctx context.Context, gameIds []pgtype.UUID) ([]ListParticipantsByGamesRow, error)
 	ListParticipantsByUser(ctx context.Context, userID pgtype.UUID) ([]Participant, error)
 	ListTeamsByGame(ctx context.Context, gameID pgtype.UUID) ([]Team, error)
+	RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) error
+	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	UpdateGame(ctx context.Context, arg UpdateGameParams) (pgtype.UUID, error)
 	UpdateParticipantPayment(ctx context.Context, arg UpdateParticipantPaymentParams) (Participant, error)
 	UpdateParticipantStatus(ctx context.Context, arg UpdateParticipantStatusParams) (Participant, error)

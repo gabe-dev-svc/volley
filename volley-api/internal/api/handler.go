@@ -415,10 +415,19 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT token
+	// Generate JWT access token
 	token, err := util.GenerateToken(user.ID, req.Email, req.FirstName, req.LastName, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Generate refresh token
+	deviceInfo := c.GetHeader("User-Agent")
+	refreshToken, err := h.userService.CreateRefreshTokenForUser(ctx, user.ID, deviceInfo)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to generate refresh token")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
 		return
 	}
 
@@ -429,11 +438,13 @@ func (h *Handler) Register(c *gin.Context) {
 
 	// Detect if request is from mobile or web
 	if isMobileClient(c) {
-		// For mobile clients: include token in JSON response
+		// For mobile clients: include tokens in JSON response
 		resp.Token = &token
+		resp.RefreshToken = &refreshToken
 	} else {
-		// For web clients: set token in HTTP-only secure cookie
+		// For web clients: set tokens in HTTP-only secure cookies
 		setAuthCookie(c, token)
+		setRefreshCookie(c, refreshToken)
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -467,6 +478,20 @@ func setAuthCookie(c *gin.Context, token string) {
 	)
 }
 
+// setRefreshCookie sets an HTTP-only secure cookie with the refresh token
+func setRefreshCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",      // name
+		token,                // value
+		60*60*24*30,          // maxAge in seconds (30 days)
+		"/",                  // path
+		"",                   // domain (empty means current domain)
+		c.Request.TLS != nil, // secure (true if HTTPS)
+		true,                 // httpOnly
+	)
+}
+
 func (h *Handler) Login(c *gin.Context) {
 	logger := LoggerFromContext(c)
 	ctx := logger.WithContext(c.Request.Context())
@@ -486,11 +511,20 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT token
+	// Generate JWT access token
 	token, err := util.GenerateToken(user.ID, user.Email, user.FirstName, user.LastName, nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to generate token")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Generate refresh token
+	deviceInfo := c.GetHeader("User-Agent")
+	refreshToken, err := h.userService.CreateRefreshTokenForUser(ctx, user.ID, deviceInfo)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to generate refresh token")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
 		return
 	}
 
@@ -501,14 +535,90 @@ func (h *Handler) Login(c *gin.Context) {
 
 	// Detect if request is from mobile or web
 	if isMobileClient(c) {
-		// For mobile clients: include token in JSON response
+		// For mobile clients: include tokens in JSON response
 		resp.Token = &token
+		resp.RefreshToken = &refreshToken
 	} else {
-		// For web clients: set token in HTTP-only secure cookie
+		// For web clients: set tokens in HTTP-only secure cookies
 		setAuthCookie(c, token)
+		setRefreshCookie(c, refreshToken)
 	}
 
 	logger.Info().Str("email", user.Email).Msg("User logged in successfully")
+	c.JSON(http.StatusOK, resp)
+}
+
+// RefreshToken handles POST /auth/refresh - refreshes an access token using a refresh token
+func (h *Handler) RefreshToken(c *gin.Context) {
+	logger := LoggerFromContext(c)
+	ctx := logger.WithContext(c.Request.Context())
+
+	var req models.RefreshTokenRequest
+
+	// For mobile clients, get refresh token from request body
+	if isMobileClient(c) {
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		// For web clients, get refresh token from cookie
+		refreshToken, err := c.Cookie("refresh_token")
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token not found"})
+			return
+		}
+		req.RefreshToken = refreshToken
+	}
+
+	// Validate the refresh token and get the user
+	user, err := h.userService.ValidateRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Invalid refresh token")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		return
+	}
+
+	// Generate new access token
+	accessToken, err := util.GenerateToken(user.ID, user.Email, user.FirstName, user.LastName, nil)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to generate access token")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Generate new refresh token (rotate refresh tokens for security)
+	deviceInfo := c.GetHeader("User-Agent")
+	newRefreshToken, err := h.userService.CreateRefreshTokenForUser(ctx, user.ID, deviceInfo)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to generate refresh token")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		return
+	}
+
+	// Revoke the old refresh token (rotation)
+	if err := h.userService.RevokeRefreshToken(ctx, req.RefreshToken); err != nil {
+		logger.Warn().Err(err).Msg("Failed to revoke old refresh token")
+		// Don't fail the request, just log the warning
+	}
+
+	// Prepare response
+	resp := models.AuthResponse{
+		User: *user,
+	}
+
+	// Detect if request is from mobile or web
+	if isMobileClient(c) {
+		// For mobile clients: include tokens in JSON response
+		resp.Token = &accessToken
+		resp.RefreshToken = &newRefreshToken
+	} else {
+		// For web clients: set tokens in HTTP-only secure cookies
+		setAuthCookie(c, accessToken)
+		setRefreshCookie(c, newRefreshToken)
+	}
+
+	logger.Info().Str("userID", user.ID).Msg("Token refreshed successfully")
 	c.JSON(http.StatusOK, resp)
 }
 

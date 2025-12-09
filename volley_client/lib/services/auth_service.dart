@@ -14,6 +14,7 @@ class AuthService {
 
   // Keys for secure storage
   static const String _tokenKey = 'auth_token';
+  static const String _refreshTokenKey = 'refresh_token';
   static const String _userKey = 'user_data';
 
   // Login with email and password
@@ -145,6 +146,10 @@ class AuthService {
     if (authResponse.token != null) {
       await _secureStorage.write(key: _tokenKey, value: authResponse.token);
     }
+    if (authResponse.refreshToken != null) {
+      await _secureStorage.write(
+          key: _refreshTokenKey, value: authResponse.refreshToken);
+    }
     await _secureStorage.write(
       key: _userKey,
       value: json.encode(authResponse.user.toJson()),
@@ -154,6 +159,11 @@ class AuthService {
   // Get stored token
   Future<String?> getToken() async {
     return await _secureStorage.read(key: _tokenKey);
+  }
+
+  // Get stored refresh token
+  Future<String?> getRefreshToken() async {
+    return await _secureStorage.read(key: _refreshTokenKey);
   }
 
   // Get stored user
@@ -171,9 +181,39 @@ class AuthService {
     return token != null;
   }
 
+  // Refresh access token using refresh token
+  Future<AuthResponse> refreshAccessToken() async {
+    final refreshToken = await getRefreshToken();
+    if (refreshToken == null) {
+      throw Exception('No refresh token available');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/refresh'),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Type': 'mobile',
+      },
+      body: json.encode({
+        'refreshToken': refreshToken,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final authResponse = AuthResponse.fromJson(json.decode(response.body));
+      await _saveAuthData(authResponse);
+      return authResponse;
+    } else {
+      // Refresh token is invalid or expired, logout the user
+      await logout();
+      throw Exception('Refresh token expired. Please login again.');
+    }
+  }
+
   // Logout
   Future<void> logout() async {
     await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _userKey);
     await _googleSignIn.signOut();
     await FacebookAuth.instance.logOut();

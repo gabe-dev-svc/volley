@@ -47,6 +47,16 @@ type Participant struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RefreshToken struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	TokenHash  string             `json:"token_hash"`
+	DeviceInfo pgtype.Text        `json:"device_info"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type Team struct {
 	ID        pgtype.UUID        `json:"id"`
 	GameID    pgtype.UUID        `json:"game_id"`

@@ -15,9 +15,15 @@ type LoginRequest struct {
 }
 
 // AuthResponse represents a successful authentication response
-// For mobile clients, the token is included in the JSON response
-// For web clients, the token is set in an HTTP-only secure cookie
+// For mobile clients, tokens are included in the JSON response
+// For web clients, tokens are set in HTTP-only secure cookies
 type AuthResponse struct {
-	Token *string `json:"token,omitempty"` // JWT token (only for mobile clients)
-	User  User    `json:"user"`            // User details
+	Token        *string `json:"token,omitempty"`        // JWT access token (included for mobile, cookie for web)
+	RefreshToken *string `json:"refreshToken,omitempty"` // Refresh token (included for mobile, cookie for web)
+	User         User    `json:"user"`                   // User details
+}
+
+// RefreshTokenRequest represents a request to refresh an access token
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
 }

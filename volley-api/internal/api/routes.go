@@ -11,6 +11,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		{
 			auth.POST("/register", h.Register)
 			auth.POST("/login", h.Login)
+			auth.POST("/refresh", h.RefreshToken)
 		}
 		// Games routes
 		games := v1.Group("/games")

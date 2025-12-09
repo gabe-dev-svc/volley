@@ -11,6 +11,22 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Refresh tokens table for managing long-lived authentication sessions
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL UNIQUE, -- SHA-256 hash of the refresh token
+    device_info VARCHAR(255), -- Optional: device/client identifier
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ -- NULL if active, set when revoked
+);
+
+-- Indexes for refresh tokens
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+
 -- Games table
 CREATE TABLE IF NOT EXISTS games (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

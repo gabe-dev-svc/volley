@@ -287,6 +287,47 @@ func (q *Queries) CreateParticipant(ctx context.Context, arg CreateParticipantPa
 	return i, err
 }
 
+const createRefreshToken = `-- name: CreateRefreshToken :one
+
+INSERT INTO refresh_tokens (
+    user_id,
+    token_hash,
+    device_info,
+    expires_at
+) VALUES (
+    $1, $2, $3, $4
+)
+RETURNING id, user_id, token_hash, device_info, expires_at, created_at, revoked_at
+`
+
+type CreateRefreshTokenParams struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	TokenHash  string             `json:"token_hash"`
+	DeviceInfo pgtype.Text        `json:"device_info"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+}
+
+// Refresh token queries
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, createRefreshToken,
+		arg.UserID,
+		arg.TokenHash,
+		arg.DeviceInfo,
+		arg.ExpiresAt,
+	)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const createTeam = `-- name: CreateTeam :one
 INSERT INTO teams (
     game_id,
@@ -355,6 +396,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens
+WHERE expires_at < NOW()
+`
+
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredRefreshTokens)
+	return err
 }
 
 const deleteGame = `-- name: DeleteGame :exec
@@ -593,6 +644,28 @@ func (q *Queries) GetParticipantByGameAndUser(ctx context.Context, arg GetPartic
 		&i.Notes,
 		&i.JoinedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
+SELECT id, user_id, token_hash, device_info, expires_at, created_at, revoked_at FROM refresh_tokens
+WHERE token_hash = $1
+AND revoked_at IS NULL
+AND expires_at > NOW()
+`
+
+func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenByHash, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.DeviceInfo,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -1060,6 +1133,29 @@ func (q *Queries) ListTeamsByGame(ctx context.Context, gameID pgtype.UUID) ([]Te
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :exec
+UPDATE refresh_tokens
+SET revoked_at = NOW()
+WHERE user_id = $1
+AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllUserRefreshTokens, userID)
+	return err
+}
+
+const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
+UPDATE refresh_tokens
+SET revoked_at = NOW()
+WHERE token_hash = $1
+`
+
+func (q *Queries) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, revokeRefreshToken, tokenHash)
+	return err
 }
 
 const updateGame = `-- name: UpdateGame :one
